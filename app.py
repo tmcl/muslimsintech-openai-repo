@@ -25,50 +25,35 @@ def encode_image(image_path):
         return base64.b64encode(image_file.read()).decode("utf-8")
 
 def get_current_weather(location, unit):
-    """
-    Retrieves weather information for a given city and returns it in a specified format.
-
-    Args:
-        location (str): The name of the city.
-        unit (str): The unit of temperature, either "celsius" or "fahrenheit".
-
-    Returns:
-        dict: A dictionary containing the location, temperature, and unit, or None if an error occurs.
-    """
+    if unit is None:
+        unit = "celsius"
 
     api_key = os.environ.get("WEATHER_API_KEY") #Retrieve the API key from environment variables
-    if not api_key:
-        return "Error: API Key not found. Set WEATHER_API_KEY environment variable."
-
-
+   
     url = f"http://api.weatherapi.com/v1/current.json?key={api_key}&q={location}"
 
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-        data = response.json()
 
-        if unit.lower() == "celsius":
-            temperature = data["current"]["temp_c"]
-        elif unit.lower() == "fahrenheit":
-            temperature = data["current"]["temp_f"]
-        else:
-            return "Error: Invalid unit.  Choose 'celsius' or 'fahrenheit'."
 
-        formatted_data = {
-            "location": data["location"]["name"],
-            "temperature": str(int(temperature)),  # Convert to int and then string as requested
-            "unit": unit.lower()  # Ensure unit is lowercase
-        }
 
-        return formatted_data
+    response = requests.get(url)      
+    data = response.json()
 
-    except requests.exceptions.RequestException as e:
-        return f"Error: Request failed - {e}"
-    except KeyError:
-        return "Error: Could not parse weather data. Check city name and API key."
-    except Exception as e:
-        return f"Error: An unexpected error occurred - {e}"
+
+    if unit is not None and unit.lower() == "celsius":
+        temperature = data["current"]["temp_c"]
+    elif unit is not None and unit.lower() == "fahrenheit":
+        temperature = data["current"]["temp_f"]
+    else:
+        temperature = data["current"]["temp_c"]
+   
+    formatted_data = {
+        "location": data["location"]["name"],
+        "temperature": str(int(temperature)),  # Convert to int and then string as requested
+        "unit": unit  # Ensure unit is lowercase
+    }
+
+
+    return json.dumps(formatted_data)
 
 
 
