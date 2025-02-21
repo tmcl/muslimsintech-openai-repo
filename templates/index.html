@@ -1,162 +1,205 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat with OpenAI</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-        }
-        #chat-box {
-            width: 50%;
-            margin: auto;
-            border: 1px solid #ccc;
-            padding: 20px;
-            margin-top: 50px;
-        }
-        .message {
-            margin-bottom: 10px;
-        }
-        .user {
-            text-align: right;
-            font-weight: bold;
-        }
-        .assistant {
-            text-align: left;
-            font-style: italic;
-        }
-        #message-input {
-            width: 100%;
-            padding: 10px;
-            margin-top: 10px;
-        }
-        #record-button {
-            margin-top: 10px;
-            padding: 10px;
-            cursor: pointer;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat with OpenAI</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+    #chat-box {
+      width: 50%;
+      margin: auto;
+      border: 1px solid #ccc;
+      padding: 20px;
+      margin-top: 50px;
+    }
+    .message {
+      margin-bottom: 10px;
+    }
+    .user {
+      text-align: right;
+      font-weight: bold;
+    }
+    .assistant {
+      text-align: left;
+      font-style: italic;
+    }
+    #message-input {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+    }
+    #record-button, #send-button {
+      margin-top: 10px;
+      padding: 10px;
+      cursor: pointer;
+    }
+    .upload-section {
+      margin-top: 10px;
+    }
+    .upload-section label {
+      margin-right: 5px;
+    }
+  </style>
 </head>
 <body>
 
 <div id="chat-box">
-    <div id="messages"></div>
-    <input type="text" id="message-input" placeholder="Type your message..."> 
-    <button id="record-button">Record</button>
+  <div id="messages"></div>
+  <input type="text" id="message-input" placeholder="Type your message...">
+  
+  <!-- New upload section for image and document attachments -->
+  <div class="upload-section">
+    <label for="image-input">Attach Image:</label>
+    <input type="file" id="image-input" accept="image/*">
+    <br>
+    <label for="file-input">Attach Document:</label>
+    <input type="file" id="file-input" accept=".pdf,.txt,.csv,.jsonl">
+  </div>
+  
+  <button id="send-button">Send</button>
+  <button id="record-button">Record</button>
 </div>
 
 <script>
-    const messageInput = document.getElementById('message-input');
-    const messagesDiv = document.getElementById('messages');
-    let lastAssistantMessage = '';
-    let currentAudio = null;
-    const recordButton = document.getElementById('record-button');
-    let mediaRecorder;
-    let audioChunks = [];
+  const messageInput = document.getElementById('message-input');
+  const messagesDiv = document.getElementById('messages');
+  const sendButton = document.getElementById('send-button');
+  const recordButton = document.getElementById('record-button');
+  const imageInput = document.getElementById('image-input');
+  const fileInput = document.getElementById('file-input');
+  let lastAssistantMessage = '';
+  let currentAudio = null;
+  let mediaRecorder;
+  let audioChunks = [];
 
-    messageInput.addEventListener('keypress', function(event) {
-        if (event.key === 'Enter') {
-            const userMessage = messageInput.value;
-            if (userMessage.trim() === '') return;
+  // Send message on Enter key press in the text field
+  messageInput.addEventListener('keypress', function(event) {
+    if (event.key === 'Enter') {
+      sendMessage();
+    }
+  });
 
-            addMessage('user', userMessage);
-            messageInput.value = '';
+  // Send message when Send button is clicked
+  sendButton.addEventListener('click', function() {
+    sendMessage();
+  });
 
-            fetch('/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ message: userMessage })
-            })
-            .then(response => response.json())
-            .then(data => {
-                lastAssistantMessage = data.response;
-                addMessage('assistant', data.response);
-                if (currentAudio) {
-                    currentAudio.pause();
-                    currentAudio = null;
-                }    
-
-                // Play the audio response automatically
-                //const audioUrl = `${data.audio_url}?t=${Math.floor(Date.now() / 1000)}`;
-                const audioUrl = `${data.audio_url}?t=${new Date().getTime()}`;
-                currentAudio = new Audio(audioUrl);
-                currentAudio.play();
-            })
-            .catch(error => {
-                console.error('Error:', error);
-            });
-        }
-    });
-
-    recordButton.addEventListener('click', function() {
-        handleRecording('/transcribe');
-    });
-
-    function handleRecording(url) {
-        if (mediaRecorder && mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-            recordButton.textContent = 'Record';
-        } else {
-            startRecording(url);
-            recordButton.textContent = 'Stop Recording';
-        }
+  // Function to send the chat message along with any attached image or file
+  function sendMessage() {
+    const userMessage = messageInput.value;
+    // Create FormData to support file uploads
+    const formData = new FormData();
+    formData.append("message", userMessage);
+    
+    // If an image is attached, append it under the key "image"
+    if (imageInput.files[0]) {
+      formData.append("image", imageInput.files[0]);
+    }
+    // If a document is attached, append it under the key "file"
+    if (fileInput.files[0]) {
+      formData.append("file", fileInput.files[0]);
     }
 
-    function startRecording(url) {
-        navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(stream => {
-                mediaRecorder = new MediaRecorder(stream);
-                mediaRecorder.start();
-                mediaRecorder.ondataavailable = event => {
-                    audioChunks.push(event.data);
-                };
-                mediaRecorder.onstop = () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                    audioChunks = [];
-                    const formData = new FormData();
-                    formData.append('file', audioBlob, 'audio.wav');
+    addMessage('user', userMessage);
+    messageInput.value = '';
+    // Clear file inputs after sending
+    imageInput.value = '';
+    fileInput.value = '';
 
-                    fetch(url, {
-                        method: 'POST',
-                        body: formData
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        messageInput.value = data.transcript;
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                    });
-                };
-            })
-            .catch(error => {
-                console.error('Error accessing microphone:', error);
-            });
-    }
-    // Add keyboard shortcut to stop audio playback
-    window.addEventListener('keydown', function(event) {
-        if (event.key === 'Escape') {
-            console.log('Escape key pressed');
-            if (currentAudio) {
-                console.log('Stopping audio playback');
-                currentAudio.pause();
-                currentAudio = null;
-            }
-        }
+    // Send formData (multipart/form-data) to the backend /chat route
+    fetch('/chat', {
+      method: 'POST',
+      body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+      lastAssistantMessage = data.response;
+      addMessage('assistant', data.response);
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio = null;
+      }
+      // Use cache-busting query param to ensure new audio is played
+      const audioUrl = `${data.audio_url}?t=${new Date().getTime()}`;
+      currentAudio = new Audio(audioUrl);
+      currentAudio.play();
+    })
+    .catch(error => {
+      console.error('Error:', error);
     });
+  }
 
-    function addMessage(role, message) {
-        const messageDiv = document.createElement('div');
-        messageDiv.classList.add('message', role);
-        messageDiv.textContent = message;
-        messagesDiv.appendChild(messageDiv);
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  // Audio recording (transcription) functionality remains unchanged
+  recordButton.addEventListener('click', function() {
+    handleRecording('/transcribe');
+  });
+
+  function handleRecording(url) {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      recordButton.textContent = 'Record';
+    } else {
+      startRecording(url);
+      recordButton.textContent = 'Stop Recording';
     }
+  }
+
+  function startRecording(url) {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.start();
+        mediaRecorder.ondataavailable = event => {
+          audioChunks.push(event.data);
+        };
+        mediaRecorder.onstop = () => {
+          const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+          audioChunks = [];
+          const formData = new FormData();
+          formData.append('file', audioBlob, 'audio.wav');
+
+          fetch(url, {
+            method: 'POST',
+            body: formData
+          })
+          .then(response => response.json())
+          .then(data => {
+            messageInput.value = data.transcript;
+          })
+          .catch(error => {
+            console.error('Error:', error);
+          });
+        };
+      })
+      .catch(error => {
+        console.error('Error accessing microphone:', error);
+      });
+  }
+
+  // Add keyboard shortcut to stop audio playback
+  window.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+      console.log('Escape key pressed');
+      if (currentAudio) {
+        console.log('Stopping audio playback');
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentAudio = null;
+      }
+    }
+  });
+
+  function addMessage(role, message) {
+    const messageDiv = document.createElement('div');
+    messageDiv.classList.add('message', role);
+    messageDiv.textContent = message;
+    messagesDiv.appendChild(messageDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  }
 </script>
 
 </body>
 </html>
-
